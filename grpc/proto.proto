@@ -4,8 +4,6 @@ option go_package = "grpc/proto";
 
 package proto;
 
-import "google/protobuf/wrappers.proto";
-
 message ClientReference {
     string client_address = 1;
     int32 client_port = 2;
@@ -18,6 +16,10 @@ message Question {
     int32 time = 2;
 }
 
+message Answer{
+    bool reply = 1;
+}
+
 service MutualExlusionService {
-    rpc AskPermission (Question) returns (google.protobuf.BoolValue);
+    rpc AskPermission (Question) returns (Answer);
 }

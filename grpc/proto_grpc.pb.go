@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -27,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MutualExlusionServiceClient interface {
-	AskPermission(ctx context.Context, in *Question, opts ...grpc.CallOption) (*wrapperspb.BoolValue, error)
+	AskPermission(ctx context.Context, in *Question, opts ...grpc.CallOption) (*Answer, error)
 }
 
 type mutualExlusionServiceClient struct {
@@ -38,8 +37,8 @@ func NewMutualExlusionServiceClient(cc grpc.ClientConnInterface) MutualExlusionS
 	return &mutualExlusionServiceClient{cc}
 }
 
-func (c *mutualExlusionServiceClient) AskPermission(ctx context.Context, in *Question, opts ...grpc.CallOption) (*wrapperspb.BoolValue, error) {
-	out := new(wrapperspb.BoolValue)
+func (c *mutualExlusionServiceClient) AskPermission(ctx context.Context, in *Question, opts ...grpc.CallOption) (*Answer, error) {
+	out := new(Answer)
 	err := c.cc.Invoke(ctx, MutualExlusionService_AskPermission_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ func (c *mutualExlusionServiceClient) AskPermission(ctx context.Context, in *Que
 // All implementations must embed UnimplementedMutualExlusionServiceServer
 // for forward compatibility
 type MutualExlusionServiceServer interface {
-	AskPermission(context.Context, *Question) (*wrapperspb.BoolValue, error)
+	AskPermission(context.Context, *Question) (*Answer, error)
 	mustEmbedUnimplementedMutualExlusionServiceServer()
 }
 
@@ -59,7 +58,7 @@ type MutualExlusionServiceServer interface {
 type UnimplementedMutualExlusionServiceServer struct {
 }
 
-func (UnimplementedMutualExlusionServiceServer) AskPermission(context.Context, *Question) (*wrapperspb.BoolValue, error) {
+func (UnimplementedMutualExlusionServiceServer) AskPermission(context.Context, *Question) (*Answer, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AskPermission not implemented")
 }
 func (UnimplementedMutualExlusionServiceServer) mustEmbedUnimplementedMutualExlusionServiceServer() {}
