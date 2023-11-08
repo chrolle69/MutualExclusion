@@ -19,6 +19,7 @@ import (
 	proto "MutualExclusion/grpc"
 )
 
+// link for Ricart & Agrawala algorithm https://www.geeksforgeeks.org/ricart-agrawala-algorithm-in-mutual-exclusion-in-distributed-system/
 // we need only the port where we receive messages
 // output port is decided automatically from operative system
 type Peer struct {
@@ -36,21 +37,22 @@ const (
 )
 
 var (
-	my_row       = flag.Int("row", 1, "Indicate the row of parameter file for this peer") // set with "-row <port>" in terminal
-	name         = flag.String("name", "peer", "name of the peer")
-	lamport_time = 0 // Lamport variable
+	my_row = flag.Int("row", 1, "Indicate the row of parameter file for this peer") // set with "-row <port>" in terminal
+	name   = flag.String("name", "peer", "name of the peer")
+	// Lamport variable
+	lamport_time = 0
 	confFile     = "confFile.csv"
 	// default values for address and port
 	my_address = "127.0.0.1"
 	my_port    = 50051
 	// store tcp connection to others peers
 	peers = make(map[string]proto.MutualExlusionServiceClient)
+	// state of the distributed mutex
 	state = Released
 )
 
 func main() {
 	flag.Parse()
-	rand.Seed(time.Now().UnixNano())
 
 	// read from confFile.txt and set the peer values
 	csvFile, err := os.Open(confFile)
@@ -91,11 +93,12 @@ func main() {
 	}
 
 	// open the port to new connection, when new one appen we have to create a connection also in the other way
-	StartListen(peer)
+	go StartListen(peer)
 
 	// Connect to the others client
 	connectToOthersPeer(peer)
 
+	// user interface
 	doSomething()
 }
 
@@ -141,7 +144,6 @@ func connectToOthersPeer(p *Peer) {
 			log.Printf("Skipped row: %v", row)
 			continue
 		}
-
 		peerAddress := row[0]
 		peerPort, _ := strconv.Atoi(row[1])
 		peerRef := row[0] + ":" + row[1]
@@ -150,6 +152,7 @@ func connectToOthersPeer(p *Peer) {
 		// add to map
 		peers[peerRef] = connection
 	}
+	log.Print("Hi!\n")
 }
 
 func connectToPeer(address string, port int) proto.MutualExlusionServiceClient {
@@ -178,29 +181,27 @@ func (peer *Peer) AskPermission(ctx context.Context, in *proto.Question) (*proto
 		connection := connectToPeer(in.ClientReference.ClientAddress, int(in.ClientReference.ClientPort))
 		peers[peerRef] = connection
 	}
-	/* like slide 15, lecture 7
-	if(state == HELD ||
-		(state == WANTED &&
-		(T,pme) < (Ti,pi)))
-		then queue req
-		else reply to req */
-	if (state == Held) || (state == Wanted) {
-		// check lamport time
-		//in.Time <> time
-		return &proto.Answer{
-			Reply: false,
-		}, nil
-	} else {
-		return &proto.Answer{
-			Reply: true,
-		}, nil
+	// Ricart–Agrawala Algorithm
+	// I don't want to execute critical or you are better than me
+	if (state == Held) || (state == Wanted && (in.Time > int32(lamport_time))) {
+		log.Print("Creating a queue, I have the precedence!")
+		for state == Held {
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
+	// update lamport time
+	setTime(int(in.Time))
+	return &proto.Answer{
+		Reply: true,
+	}, nil
+
 }
 
 func doSomething() {
 	for {
 		var text string
-		log.Printf("Press enter to do mutual execution ('exit' to quit): ")
+		log.Printf("Insert 'mutual' to do mutual execution or 'exit' to quit \n" +
+			"or anything else to do a simple execution (increment Lamport time): ")
 		fmt.Scanln(&text)
 
 		increaseTime() // an event occurred
@@ -208,36 +209,40 @@ func doSomething() {
 			break
 		}
 
-		// authorized to enter critical section
-		authorizated := true
+		if text != "mutual" {
+			increaseTime()
+			log.Printf("Current Lamport time: %d", lamport_time)
+			continue
+		}
+		state = Wanted
+		// Peers enters the critical section if it has received the REPLY message from all other sites.
+		peerRef := &proto.ClientReference{
+			ClientAddress: my_address,
+			ClientPort:    int32(my_port),
+			ClientName:    *name,
+		}
 		for _, peer := range peers {
-			peerRef := &proto.ClientReference{
-				ClientAddress: my_address,
-				ClientPort:    int32(my_port),
-				ClientName:    *name,
-			}
-			response, err := peer.AskPermission(context.Background(),
+			_, err := peer.AskPermission(context.Background(),
 				&proto.Question{
 					ClientReference: peerRef,
 					Time:            int32(lamport_time),
 				})
 			if err != nil {
-				log.Printf("RPC failed, peer no more available: %v", err)
+				log.Printf("RPC failed, peer no more available, ignore response")
 				continue
 			}
-			log.Printf("Response: %v", response)
-			if response.Reply == false {
-				authorizated = false
-				break
-			}
 		}
-		if authorizated {
-			// do something
-			log.Println("Starting critical section")
-			time.Sleep(time.Duration(rand.Intn(4)+2) * time.Second)
-			fmt.Println("Ending critical section")
-		}
+		// do critical section
+		criticalSection()
 	}
+}
+
+func criticalSection() {
+	state = Held
+	log.Println("Starting critical section")
+	time.Sleep(time.Duration(rand.Intn(4)+2) * time.Second)
+	log.Println("Ending critical section")
+	state = Released
 }
 
 func increaseTime() {
