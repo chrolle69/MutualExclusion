@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -10,10 +9,10 @@ import (
 	"strconv"
 	"sync"
 
-	proto "MutualExclusion/grpc"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	proto "MutualExclusion/grpc"
 )
 
 type Peer struct {
@@ -25,30 +24,27 @@ type Peer struct {
 }
 
 var (
-	// edit this with config file
-	peerPort = flag.Int("cPort", 5500, "client port")
-	peerAddr = flag.String("sAddr", "localhost", "server address")
-	peerName = flag.String("cName", "Anonymous", "client name")
 	time     = 0 // Lamport variable
+	confFile = "confFile.txt"
 )
 
 func main() {
-	// Parse the flags to get the port for the client
-	flag.Parse()
 
-	// open the port to new connection, when new one appen we have to create a connection also in the other way
-	startListen()
-
-	// try to connect to other client
+	// read from confFile.txt and set the values
 
 	peer := &Peer{
-		name:       *clientName,
-		address:    "127.0.0.1", // modify in case of global test
-		portNumber: *clientPort,
+		// edit this with new variables
+		name:    "peer",
+		address: "127.0.0.1",
+		portIn:  5000,
+		portOut: 50001,
 	}
 
-	// Connect and publish message
-	connectAndPublish(client)
+	// open the port to new connection, when new one appen we have to create a connection also in the other way
+	startListen(peer)
+
+	// Connect to the others client
+	connectToOthersPeer(peer)
 }
 
 func StartListen() {
@@ -72,9 +68,10 @@ func StartListen() {
 	}
 }
 
-func connectAndPublish(client *Client) {
+func connect(peer *Peer) {
 
-	// Connect to the server
+	// Connect to others peer
+
 	serverConnection := connectToServer()
 
 	client_reference := &proto.ClientReference{
@@ -181,15 +178,15 @@ func connectAndPublish(client *Client) {
 	wg.Wait()
 }
 
-func connectToServer() proto.ChittyChatServiceClient {
+func connectToPeer() proto.MutualExlusionServiceClient {
 	// Dial the server at the specified port.
 	conn, err := grpc.Dial(*serverAddr+":"+strconv.Itoa(*serverPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("Could not connect to port %d", *serverPort)
+		log.Printf("Could not connect to peer at port %d", *serverPort)
 	} else {
-		log.Printf("Connected to the server at port %d\n", *serverPort)
+		log.Printf("Connected to the peer at port %d\n", *serverPort)
 	}
-	return proto.NewChittyChatServiceClient(conn)
+	return proto.NewMutualExlusionServiceClient(conn)
 }
 
 func increaseTime() {
