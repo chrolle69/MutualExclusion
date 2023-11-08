@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -17,27 +19,40 @@ import (
 	proto "MutualExclusion/grpc"
 )
 
+// we need only the port where we receive messages
+// output port is decided automatically from operative system
 type Peer struct {
 	proto.UnimplementedMutualExlusionServiceServer
 	name    string
 	address string
-	portIn  int
-	portOut int
+	port    int
 }
 
+// peer states
+const (
+	Released int = 0
+	Wanted       = 1
+	Held         = 2
+)
+
 var (
-	my_row   = flag.Int("row", 1, "Indicate the parameters for this peer") // set with "-row <port>" in terminal
-	time     = 0                                                           // Lamport variable
-	confFile = "confFile.csv"
+	my_row       = flag.Int("row", 1, "Indicate the row of parameter file for this peer") // set with "-row <port>" in terminal
+	name         = flag.String("name", "peer", "name of the peer")
+	lamport_time = 0 // Lamport variable
+	confFile     = "confFile.csv"
+	// default values for address and port
+	my_address = "127.0.0.1"
+	my_port    = 50051
+	// store tcp connection to others peers
+	peers = make(map[string]proto.MutualExlusionServiceClient)
+	state = Released
 )
 
 func main() {
-
 	flag.Parse()
-	// we will use a param passed through command line
-	// read from confFile.txt and set the values
+	rand.Seed(time.Now().UnixNano())
 
-	// Apri il file CSV per la lettura
+	// read from confFile.txt and set the peer values
 	csvFile, err := os.Open(confFile)
 	if err != nil {
 		fmt.Printf("Error while opening CSV file: %v\n", err)
@@ -53,33 +68,35 @@ func main() {
 	}
 
 	found := false
-
 	for index, row := range rows {
 		if index == *my_row {
-			fmt.Printf("Row founded : %s, %s , %s\n", row[0], row[1], row[2])
+			fmt.Printf("Your settings are : %s address, %s port\n", row[0], row[1])
+			my_address = row[0]
+			my_port, _ = strconv.Atoi(row[1])
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		fmt.Printf("Riga not founded\n")
+		fmt.Printf("Row with parameters not founded\n")
+		return
 	}
-	/*
 
-		peer := &Peer{
-			// edit this with new variables
-			name:    "peer",
-			address: "127.0.0.1",
-			portIn:  5000,
-			portOut: 50001,
-		}
+	peer := &Peer{
+		// edit this with new variables
+		name:    *name,
+		address: my_address,
+		port:    my_port,
+	}
 
-		// open the port to new connection, when new one appen we have to create a connection also in the other way
-		StartListen(peer)
+	// open the port to new connection, when new one appen we have to create a connection also in the other way
+	StartListen(peer)
 
-		// Connect to the others client
-		connectToOthersPeer()*/
+	// Connect to the others client
+	connectToOthersPeer(peer)
+
+	doSomething()
 }
 
 func StartListen(peer *Peer) {
@@ -87,12 +104,12 @@ func StartListen(peer *Peer) {
 	grpcPeer := grpc.NewServer()
 
 	// Make the server listen at the given port (convert int port to string)
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", peer.address, strconv.Itoa(peer.portIn)))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", peer.address, strconv.Itoa(peer.port)))
 
 	if err != nil {
 		log.Fatalf("Could not create the peer %v", err)
 	}
-	log.Printf("Started peer receiving at address: %s and at port: %d\n", peer.address, peer.portIn)
+	log.Printf("Started peer receiving at address: %s and at port: %d\n", peer.address, peer.port)
 
 	// Register the grpc service
 	proto.RegisterMutualExlusionServiceServer(grpcPeer, peer)
@@ -104,7 +121,7 @@ func StartListen(peer *Peer) {
 }
 
 // Connect to others peer
-func connectToOthersPeer() {
+func connectToOthersPeer(p *Peer) {
 	// read csv file
 	file, err := os.Open(confFile)
 	if err != nil {
@@ -118,10 +135,7 @@ func connectToOthersPeer() {
 		log.Fatalf("Failed to read file data: %v", err)
 	}
 
-	// array of peers
-	var peers []proto.MutualExlusionServiceClient
-
-	// foreach row in the
+	// try to connect to other peers
 	for index, row := range rows {
 		if len(row) < 2 || (index == *my_row) {
 			log.Printf("Skipped row: %v", row)
@@ -130,34 +144,12 @@ func connectToOthersPeer() {
 
 		peerAddress := row[0]
 		peerPort, _ := strconv.Atoi(row[1])
-
-		client := connectToPeer(peerAddress, peerPort)
-		peers = append(peers, client)
+		peerRef := row[0] + ":" + row[1]
+		// retrieve connection
+		connection := connectToPeer(peerAddress, peerPort)
+		// add to map
+		peers[peerRef] = connection
 	}
-
-	for {
-		var text string
-		log.Printf("Press enter to do mutual execution: ")
-		fmt.Scanln(&text)
-
-		increaseTime() // an event occurred
-		/* Use array
-		for index, client := range clients {
-			response, err := client.AskPermission(context.Background(), &proto.Question{})
-			if err != nil {
-				log.Printf("RPC failed: %v", err)
-				continue
-			}
-			log.Printf("Response: %v", response)
-		}*/
-	}
-}
-
-func (peer *Peer) AskPermission(ctx context.Context, in *proto.Question) (*proto.Answer, error) {
-	// to do implement
-	return &proto.Answer{
-		Reply: false,
-	}, nil
 }
 
 func connectToPeer(address string, port int) proto.MutualExlusionServiceClient {
@@ -171,11 +163,88 @@ func connectToPeer(address string, port int) proto.MutualExlusionServiceClient {
 	return proto.NewMutualExlusionServiceClient(conn)
 }
 
+func (peer *Peer) AskPermission(ctx context.Context, in *proto.Question) (*proto.Answer, error) {
+	// check if the peer requesting permission is not in the list of connected peers
+	peerRef := in.ClientReference.ClientAddress + ":" + strconv.Itoa(int(in.ClientReference.ClientPort))
+	found := false
+	for index := range peers {
+		if index == peerRef {
+			found = true
+			break
+		}
+	}
+	// receive request from a not known peer
+	if !found {
+		connection := connectToPeer(in.ClientReference.ClientAddress, int(in.ClientReference.ClientPort))
+		peers[peerRef] = connection
+	}
+	/* like slide 15, lecture 7
+	if(state == HELD ||
+		(state == WANTED &&
+		(T,pme) < (Ti,pi)))
+		then queue req
+		else reply to req */
+	if (state == Held) || (state == Wanted) {
+		// check lamport time
+		//in.Time <> time
+		return &proto.Answer{
+			Reply: false,
+		}, nil
+	} else {
+		return &proto.Answer{
+			Reply: true,
+		}, nil
+	}
+}
+
+func doSomething() {
+	for {
+		var text string
+		log.Printf("Press enter to do mutual execution ('exit' to quit): ")
+		fmt.Scanln(&text)
+
+		increaseTime() // an event occurred
+		if text == "exit" {
+			break
+		}
+
+		// authorized to enter critical section
+		authorizated := true
+		for _, peer := range peers {
+			peerRef := &proto.ClientReference{
+				ClientAddress: my_address,
+				ClientPort:    int32(my_port),
+				ClientName:    *name,
+			}
+			response, err := peer.AskPermission(context.Background(),
+				&proto.Question{
+					ClientReference: peerRef,
+					Time:            int32(lamport_time),
+				})
+			if err != nil {
+				log.Printf("RPC failed, peer no more available: %v", err)
+				continue
+			}
+			log.Printf("Response: %v", response)
+			if response.Reply == false {
+				authorizated = false
+				break
+			}
+		}
+		if authorizated {
+			// do something
+			log.Println("Starting critical section")
+			time.Sleep(time.Duration(rand.Intn(4)+2) * time.Second)
+			fmt.Println("Ending critical section")
+		}
+	}
+}
+
 func increaseTime() {
-	time++
+	lamport_time++
 }
 
 func setTime(received int) {
-	max := math.Max(float64(received), float64(time))
-	time = int(max + 1)
+	max := math.Max(float64(received), float64(lamport_time))
+	lamport_time = int(max + 1)
 }
