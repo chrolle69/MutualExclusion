@@ -1,4 +1,4 @@
-module ChittyChat
+module MutualExclusion
 
 go 1.18
 
