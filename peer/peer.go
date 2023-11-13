@@ -184,7 +184,7 @@ func (peer *Peer) AskPermission(ctx context.Context, in *proto.Question) (*proto
 	// check if the peer requesting permission is not in the list of connected peers
 	// it can be a reconnected peer or one not present in the configuration file
 	peerRef := in.ClientReference.ClientAddress + ":" + strconv.Itoa(int(in.ClientReference.ClientPort))
-	log.Printf("Lamport Time: %d: Peer [%s] asked for a mutual exection", lamport_time, peerRef)
+	log.Printf("Lamport %d: Peer [%s] asked for a mutual exection", lamport_time, peerRef)
 	found := false
 	for index := range peers {
 		if index == peerRef {
