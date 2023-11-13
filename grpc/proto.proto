@@ -18,6 +18,7 @@ message Question {
 
 message Answer{
     bool reply = 1;
+    int32 time = 2;
 }
 
 service MutualExlusionService {
