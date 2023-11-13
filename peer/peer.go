@@ -43,7 +43,7 @@ var (
 	name   = flag.String("name", "peer", "name of the peer")
 	// Lamport variable
 	lamport_time = 0
-	confFile     = "./../confFile.csv"
+	confFile     = "confFile.csv"
 	// default values for address and port
 	my_address = "127.0.0.1"
 	my_port    = 50050
