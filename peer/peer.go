@@ -246,12 +246,12 @@ func doSomething() {
 					ClientReference: peerRef,
 					Time:            int32(myRequestTime),
 				})
-			setTime(int(answer.Time))
 			if err != nil {
 				log.Printf("Lamport %d: Peer [%s] no more available, removed from connected peers", lamport_time, index)
 				delete(peers, index)
 				continue
 			} else {
+				setTime(int(answer.Time))
 				log.Printf("Lamport %d: Got permission from peer [%s]", lamport_time, index)
 			}
 		}
